@@ -28,8 +28,9 @@
  *    - UI responsiva independente da conexão
  */
 
-import ApiService from './ApiService';
+import ApiService, { API_CONFIG } from './ApiService';
 import { openDatabase } from '../database/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Configurações de sincronização
@@ -175,6 +176,34 @@ class SyncService {
       return { success: false, message: error.message };
     } finally {
       this.syncInProgress = false;
+    }
+  }
+
+  /**
+   * Buscar mudanças do servidor desde a última sincronização
+   */
+  async pullServerChanges() {
+    try {
+      // 1. Obter o timestamp da última sincronização
+      const lastSyncTimestamp = await AsyncStorage.getItem(API_CONFIG.STORAGE_KEYS.LAST_SYNC);
+
+      // 2. Buscar mudanças do servidor
+      const changes = await ApiService.getChangesSince(lastSyncTimestamp);
+
+      if (changes && changes.success) {
+        // 3. Atualizar dados locais com as mudanças do servidor
+        await this.updateLocalData(changes.data);
+
+        // 4. Atualizar o timestamp da última sincronização
+        await AsyncStorage.setItem(
+          API_CONFIG.STORAGE_KEYS.LAST_SYNC,
+          new Date().toISOString()
+        );
+        console.log('[Sync] Server changes pulled and applied successfully');
+      }
+    } catch (error) {
+      console.error('[Sync] Error pulling server changes:', error);
+      // Não lançar o erro para não interromper o fluxo de sincronização
     }
   }
 

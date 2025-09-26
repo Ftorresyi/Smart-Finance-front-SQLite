@@ -35,7 +35,7 @@ import NetInfo from '@react-native-community/netinfo';
 /**
  * Configuração base da API
  */
-const API_CONFIG = {
+export const API_CONFIG = {
   // URL base da sua API Java (ajuste conforme necessário)
   BASE_URL: 'https://8080-idd4pgwgqlwpm8ea4u57u-3d2090d9.manusvm.computer',
   
@@ -60,6 +60,9 @@ const API_CONFIG = {
     
     // Usuário
     USER_PROFILE: '/api/user/profile',
+
+    // Sincronização
+    SYNC: '/api/sync',
   },
   
   // Configurações de timeout

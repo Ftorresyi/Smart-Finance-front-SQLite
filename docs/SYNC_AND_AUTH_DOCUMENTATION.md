@@ -85,17 +85,24 @@ Este é o coração da arquitetura híbrida, orquestrado pelo `SyncService`.
 ### **Passo 1: Enviar Mudanças Locais (Upload)**
 1.  O `SyncService` busca no banco de dados local todos os registros de todas as tabelas que estão marcados com `needs_sync = 1`.
 2.  Ele agrupa esses registros por tipo (categorias, transações, etc.).
-3.  Envia esses grupos para um endpoint especializado no backend (ex: `POST /sync/changes`).
+3.  Envia esses grupos para um endpoint especializado no backend (ex: `POST /api/sync/push`).
     *   **Registros novos** (sem `server_id`) são criados no backend.
     *   **Registros existentes** (com `server_id`) são atualizados.
     *   **Registros com `is_deleted = 1`** são excluídos no backend.
 4.  O backend processa esses dados e retorna os `server_id` para os novos registros.
 5.  O `SyncService` atualiza os registros locais com os `server_id` recebidos e marca `needs_sync = 0`.
 
-### **Passo 2: Buscar Mudanças Remotas (Download)**
-1.  O `SyncService` pergunta ao servidor por todas as mudanças que ocorreram desde a última sincronização bem-sucedida, enviando o timestamp de `last_synced_at`.
-2.  O backend retorna uma lista de registros (novos ou atualizados) que foram modificados no servidor por outros dispositivos.
-3.  O `SyncService` percorre essa lista e insere ou atualiza (operação "UPSERT") os registros no banco de dados local (SQLite), usando o `server_id` como chave de reconciliação.
+### **Passo 2: Buscar Mudanças Remotas (Download/Pull)**
+Esta etapa garante que os dados modificados em outros dispositivos ou diretamente no servidor sejam refletidos no aplicativo.
+
+1.  **Obter Timestamp**: O `SyncService` recupera o `lastSyncTimestamp` (data e hora da última sincronização bem-sucedida) do `AsyncStorage`.
+2.  **Requisição à API**: Ele chama o método `getChangesSince(lastSyncTimestamp)` do `ApiService`, que faz uma requisição ao backend: `GET /api/sync?since=...`.
+3.  **Resposta do Servidor**: O servidor retorna um pacote de dados contendo apenas os registros que foram criados ou alterados desde o timestamp fornecido.
+4.  **Processamento Local (UPSERT)**: O `SyncService` recebe esses dados e chama o método `updateLocalData`. Para cada item recebido, ele realiza uma operação "UPSERT" no banco de dados SQLite:
+    *   **Procura** pelo `server_id` no banco local.
+    *   Se **encontra**, ele **ATUALIZA** o registro local.
+    *   Se **não encontra**, ele **INSERE** o novo registro.
+5.  **Atualizar Timestamp**: Após a conclusão bem-sucedida, o `SyncService` salva o timestamp atual como o novo `lastSyncTimestamp`, preparando-se para a próxima sincronização.
 
 ### **Exemplo de um Novo Lançamento (Create)**
 1.  Usuário cria uma nova categoria.
@@ -103,7 +110,7 @@ Este é o coração da arquitetura híbrida, orquestrado pelo `SyncService`.
 3.  A função insere a categoria no SQLite com `needs_sync = 1`.
 4.  A UI é atualizada imediatamente (UI Otimista).
 5.  `useStore` chama `performSync()`.
-6.  O `SyncService` encontra a nova categoria e a envia para o servidor.
+6.  O `SyncService` (no passo de **Upload**) encontra a nova categoria e a envia para o servidor.
 7.  O servidor retorna o `server_id`.
 8.  O `SyncService` atualiza o registro local com o `server_id` e `needs_sync = 0`.
 
