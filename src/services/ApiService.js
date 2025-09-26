@@ -37,7 +37,7 @@ import NetInfo from '@react-native-community/netinfo';
  */
 export const API_CONFIG = {
   // URL base da sua API Java (ajuste conforme necessário)
-  BASE_URL: 'https://8080-idd4pgwgqlwpm8ea4u57u-3d2090d9.manusvm.computer',
+  BASE_URL: 'https://localhost:8083', 
   
   // Endpoints da API
   ENDPOINTS: {
