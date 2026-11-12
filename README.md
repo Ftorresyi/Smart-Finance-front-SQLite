@@ -140,6 +140,19 @@ expo start
 - Escaneie o QR code com o app Expo Go (Android/iOS)
 - Ou use um emulador configurado
 
+### Configurando a URL da API
+
+O app usa `EXPO_PUBLIC_API_URL` se a variável estiver definida; caso contrário, usa `http://localhost:8083`.
+
+No PowerShell, defina a URL antes de iniciar o Expo:
+
+```powershell
+$env:EXPO_PUBLIC_API_URL="http://localhost:8083"
+npm start
+```
+
+`localhost` funciona quando o app e a API compartilham o mesmo computador (por exemplo, Expo Web ou simulador iOS). No emulador Android, use `http://10.0.2.2:8083`. Em um aparelho físico, use o endereço IP local do computador que executa a API, por exemplo `http://192.168.1.10:8083`, e conecte ambos à mesma rede.
+
 ## 📊 Banco de Dados
 
 O aplicativo utiliza SQLite para armazenamento local com as seguintes tabelas:
@@ -304,4 +317,3 @@ Desenvolvido com ❤️ para demonstrar habilidades em React Native e desenvolvi
 Para dúvidas ou sugestões sobre o projeto, entre em contato!
 
 **Smart Finance** - Seu controle financeiro na palma da mão 💰📱
-

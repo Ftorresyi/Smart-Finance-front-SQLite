@@ -10,7 +10,7 @@
  * 1. AXIOS INTERCEPTORS:
  *    - Interceptam requisições para adicionar headers automaticamente
  *    - Interceptam respostas para tratar erros globalmente
- *    - Renovam tokens JWT automaticamente quando expiram
+ *    - Tratam respostas HTTP de autenticação inválida
  * 
  * 2. TRATAMENTO DE CONECTIVIDADE:
  *    - Detecta se o dispositivo está online/offline
@@ -20,7 +20,7 @@
  * 3. AUTENTICAÇÃO JWT:
  *    - Armazena tokens de forma segura
  *    - Adiciona Authorization header automaticamente
- *    - Gerencia refresh de tokens
+ *    - Persiste o token de acesso emitido pela API
  * 
  * 4. CACHE E SINCRONIZAÇÃO:
  *    - Cache local para dados frequentemente acessados
@@ -36,21 +36,19 @@ import NetInfo from '@react-native-community/netinfo';
  * Configuração base da API
  */
 export const API_CONFIG = {
-  // URL base da sua API Java (ajuste conforme necessário)
-  BASE_URL: 'https://localhost:8083', 
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8083',
   
   // Endpoints da API
   ENDPOINTS: {
     // Autenticação
-    LOGIN: '/auth/login',
-    REGISTER: '/auth/register',
-    REFRESH_TOKEN: '/auth/refresh',
+    LOGIN: '/api/auth/login',
+    REGISTER: '/api/auth/register',
     
     // Categorias
     CATEGORIES: '/api/categories',
     
     // Transações
-    TRANSACTIONS: '/api/transactions',
+    TRANSACTIONS: '/transactions',
     
     // Cartões de Crédito
     CREDIT_CARDS: '/api/credit-cards',
@@ -59,7 +57,7 @@ export const API_CONFIG = {
     FINANCIAL_GOALS: '/api/financial-goals',
     
     // Usuário
-    USER_PROFILE: '/api/user/profile',
+    USER_PROFILE: '/api/users/me',
 
     // Sincronização
     SYNC: '/api/sync',
@@ -71,7 +69,7 @@ export const API_CONFIG = {
   // Chaves para AsyncStorage
   STORAGE_KEYS: {
     ACCESS_TOKEN: '@smart_finance:access_token',
-    REFRESH_TOKEN: '@smart_finance:refresh_token',
+    LEGACY_REFRESH_TOKEN: '@smart_finance:refresh_token',
     USER_DATA: '@smart_finance:user_data',
     OFFLINE_QUEUE: '@smart_finance:offline_queue',
     LAST_SYNC: '@smart_finance:last_sync',
@@ -127,29 +125,18 @@ class ApiService {
       }
     );
 
-    // Interceptor de resposta - trata erros e renova tokens
+    // A API ainda nao oferece um endpoint para renovar tokens.
     apiClient.interceptors.response.use(
       (response) => {
         console.log(`[API] Response ${response.status} from ${response.config.url}`);
         return response;
       },
       async (error) => {
-        const originalRequest = error.config;
-
-        // Se o token expirou (401) e não é uma tentativa de refresh
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true;
-
+        if (error.response?.status === 401 && error.config?.headers?.Authorization) {
           try {
-            const newToken = await this.refreshAccessToken();
-            if (newToken) {
-              originalRequest.headers.Authorization = `Bearer ${newToken}`;
-              return apiClient(originalRequest);
-            }
-          } catch (refreshError) {
-            console.error('[API] Token refresh failed:', refreshError);
             await this.logout();
-            return Promise.reject(refreshError);
+          } catch (logoutError) {
+            console.error('[Auth] Failed to clear credentials after unauthorized response:', logoutError);
           }
         }
 
@@ -330,21 +317,42 @@ class ApiService {
         password,
       }, null, { skipOfflineQueue: true });
 
-      const { accessToken, refreshToken, user } = response.data;
+      const { token } = response.data;
+      if (typeof token !== 'string' || !token) {
+        throw new Error('The API login response did not include a token');
+      }
 
-      // Salvar tokens e dados do usuário
-      await Promise.all([
-        AsyncStorage.setItem(API_CONFIG.STORAGE_KEYS.ACCESS_TOKEN, accessToken),
-        AsyncStorage.setItem(API_CONFIG.STORAGE_KEYS.REFRESH_TOKEN, refreshToken),
-        AsyncStorage.setItem(API_CONFIG.STORAGE_KEYS.USER_DATA, JSON.stringify(user)),
-      ]);
+      await AsyncStorage.setItem(API_CONFIG.STORAGE_KEYS.ACCESS_TOKEN, token);
 
-      console.log('[Auth] Login successful');
-      return { success: true, user };
+      try {
+        const userResponse = await this.makeRequest('GET', API_CONFIG.ENDPOINTS.USER_PROFILE);
+        const user = userResponse.data;
+        await AsyncStorage.setItem(API_CONFIG.STORAGE_KEYS.USER_DATA, JSON.stringify(user));
+
+        console.log('[Auth] Login successful');
+        return { success: true, user, token };
+      } catch (error) {
+        try {
+          await this.logout();
+        } catch (logoutError) {
+          console.error('[Auth] Failed to clear credentials after profile request failed:', logoutError);
+        }
+        throw error;
+      }
     } catch (error) {
       console.error('[Auth] Login failed:', error);
       throw error;
     }
+  }
+
+  async register(name, email, password) {
+    const response = await this.makeRequest('POST', API_CONFIG.ENDPOINTS.REGISTER, {
+      name,
+      email,
+      password,
+    }, null, { skipOfflineQueue: true });
+
+    return response.data;
   }
 
   /**
@@ -355,7 +363,7 @@ class ApiService {
       // Limpar tokens e dados locais
       await Promise.all([
         AsyncStorage.removeItem(API_CONFIG.STORAGE_KEYS.ACCESS_TOKEN),
-        AsyncStorage.removeItem(API_CONFIG.STORAGE_KEYS.REFRESH_TOKEN),
+        AsyncStorage.removeItem(API_CONFIG.STORAGE_KEYS.LEGACY_REFRESH_TOKEN),
         AsyncStorage.removeItem(API_CONFIG.STORAGE_KEYS.USER_DATA),
       ]);
 
@@ -363,32 +371,6 @@ class ApiService {
       return { success: true };
     } catch (error) {
       console.error('[Auth] Logout error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Renovar token de acesso
-   */
-  async refreshAccessToken() {
-    try {
-      const refreshToken = await AsyncStorage.getItem(API_CONFIG.STORAGE_KEYS.REFRESH_TOKEN);
-      
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
-
-      const response = await apiClient.post(API_CONFIG.ENDPOINTS.REFRESH_TOKEN, {
-        refreshToken,
-      });
-
-      const { accessToken } = response.data;
-      await AsyncStorage.setItem(API_CONFIG.STORAGE_KEYS.ACCESS_TOKEN, accessToken);
-
-      console.log('[Auth] Token refreshed successfully');
-      return accessToken;
-    } catch (error) {
-      console.error('[Auth] Token refresh failed:', error);
       throw error;
     }
   }
@@ -577,4 +559,3 @@ class ApiService {
 
 // Exportar instância singleton
 export default new ApiService();
-
