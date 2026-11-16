@@ -126,7 +126,7 @@ cd smart-finance
 
 2. **Instale as dependências**
 ```bash
-npm install
+npm ci
 ```
 
 3. **Inicie o projeto**

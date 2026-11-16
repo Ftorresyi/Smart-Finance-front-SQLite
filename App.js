@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Alert } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Navigation from './src/components/Navigation';
 import { initDatabase } from './src/database/database';
 
@@ -24,9 +25,9 @@ export default function App() {
   };
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="light" backgroundColor="#007AFF" />
       <Navigation />
-    </>
+    </GestureHandlerRootView>
   );
 }
