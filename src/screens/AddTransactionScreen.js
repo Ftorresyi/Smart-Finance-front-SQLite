@@ -40,6 +40,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -57,6 +58,7 @@ export default function AddTransactionScreen({ navigation, route }) {
   const [categoryId, setCategoryId] = useState('');
   const [creditCardId, setCreditCardId] = useState('');
   const [transactionDate, setTransactionDate] = useState(new Date());
+  const [pendingTransactionDate, setPendingTransactionDate] = useState(new Date());
   
   // Estados para controle da UI
   const [errors, setErrors] = useState({});
@@ -75,6 +77,7 @@ export default function AddTransactionScreen({ navigation, route }) {
     loadCreditCards,
     loading,
   } = useStore();
+  const isSaving = isSubmitting || loading.transactions;
 
   /**
    * useEffect - Carrega dados necessários e preenche formulário se editando
@@ -217,10 +220,16 @@ export default function AddTransactionScreen({ navigation, route }) {
       };
 
       if (isEditing) {
-        await updateTransaction(transaction.id, transactionData);
+        const result = await updateTransaction(transaction.id, transactionData);
+        if (result && result.success === false) {
+          throw new Error(result.error || 'Erro ao atualizar transação');
+        }
         Alert.alert('Sucesso', 'Transação atualizada com sucesso!');
       } else {
-        await addTransaction(transactionData);
+        const result = await addTransaction(transactionData);
+        if (result && result.success === false) {
+          throw new Error(result.error || 'Erro ao registrar transação');
+        }
         Alert.alert('Sucesso', 'Transação registrada com sucesso!');
       }
 
@@ -561,7 +570,10 @@ export default function AddTransactionScreen({ navigation, route }) {
           <Text style={styles.label}>Data da Transação</Text>
           <TouchableOpacity
             style={styles.selector}
-            onPress={() => setShowDatePicker(true)}
+            onPress={() => {
+              setPendingTransactionDate(transactionDate);
+              setShowDatePicker(true);
+            }}
           >
             <View style={styles.selectedItem}>
               <Ionicons name="calendar" size={16} color="#007AFF" />
@@ -577,12 +589,12 @@ export default function AddTransactionScreen({ navigation, route }) {
           style={[
             styles.saveButton,
             { backgroundColor: type === 'income' ? '#4CAF50' : '#F44336' },
-            (isSubmitting || loading) && styles.saveButtonDisabled
+            isSaving && styles.saveButtonDisabled
           ]}
           onPress={handleSave}
-          disabled={isSubmitting || loading}
+          disabled={isSaving}
         >
-          {isSubmitting || loading ? (
+          {isSaving ? (
             <ActivityIndicator color="white" />
           ) : (
             <>
@@ -600,14 +612,50 @@ export default function AddTransactionScreen({ navigation, route }) {
       <CreditCardModal />
 
       {/* Date Picker */}
-      {showDatePicker && (
+      {showDatePicker && Platform.OS === 'ios' && (
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowDatePicker(false)}
+        >
+          <View style={styles.datePickerOverlay}>
+            <View style={styles.datePickerContainer}>
+              <View style={styles.datePickerActions}>
+                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                  <Text style={styles.datePickerActionText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setTransactionDate(pendingTransactionDate);
+                    setShowDatePicker(false);
+                  }}
+                >
+                  <Text style={styles.datePickerActionText}>Confirmar</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={pendingTransactionDate}
+                mode="date"
+                display="spinner"
+                onChange={(_, selectedDate) => {
+                  if (selectedDate) {
+                    setPendingTransactionDate(selectedDate);
+                  }
+                }}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+      {showDatePicker && Platform.OS === 'android' && (
         <DateTimePicker
           value={transactionDate}
           mode="date"
           display="default"
           onChange={(event, selectedDate) => {
             setShowDatePicker(false);
-            if (selectedDate) {
+            if (event.type === 'set' && selectedDate) {
               setTransactionDate(selectedDate);
             }
           }}
@@ -859,6 +907,28 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
+  datePickerOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  datePickerContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingTop: 16,
+  },
+  datePickerActionText: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 
   // Mensagens de erro
   errorText: {
@@ -867,4 +937,3 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 });
-

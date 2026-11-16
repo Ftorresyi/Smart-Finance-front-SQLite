@@ -245,144 +245,76 @@ class SyncService {
    * Sincronizar categorias
    */
   async syncCategories(serverCategories) {
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        // Buscar categorias locais
-        tx.executeSql(
-          'SELECT * FROM categories',
-          [],
-          (_, { rows }) => {
-            const localCategories = rows._array;
-            
-            // Processar cada categoria do servidor
-            serverCategories.forEach(serverCategory => {
-              const localCategory = localCategories.find(local => local.server_id === serverCategory.id);
-              
-              if (localCategory) {
-                // Categoria existe localmente, verificar se precisa atualizar
-                if (this.shouldUpdateLocal(localCategory, serverCategory)) {
-                  this.updateLocalCategory(tx, localCategory.id, serverCategory);
-                }
-              } else {
-                // Nova categoria do servidor
-                this.insertLocalCategory(tx, serverCategory);
-              }
-            });
-            
-            resolve();
-          },
-          (_, error) => {
-            console.error('[Sync] Error fetching local categories:', error);
-            reject(error);
-          }
-        );
-      });
-    });
+    const localCategories = await this.db.getAllAsync('SELECT * FROM categories');
+
+    for (const serverCategory of serverCategories) {
+      const localCategory = localCategories.find(local => local.server_id === serverCategory.id);
+
+      if (localCategory) {
+        if (this.shouldUpdateLocal(localCategory, serverCategory)) {
+          await this.updateLocalCategory(localCategory.id, serverCategory);
+        }
+      } else {
+        await this.insertLocalCategory(serverCategory);
+      }
+    }
   }
 
   /**
    * Sincronizar transações
    */
   async syncTransactions(serverTransactions) {
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'SELECT * FROM transactions',
-          [],
-          (_, { rows }) => {
-            const localTransactions = rows._array;
-            
-            serverTransactions.forEach(serverTransaction => {
-              const localTransaction = localTransactions.find(local => local.server_id === serverTransaction.id);
-              
-              if (localTransaction) {
-                if (this.shouldUpdateLocal(localTransaction, serverTransaction)) {
-                  this.updateLocalTransaction(tx, localTransaction.id, serverTransaction);
-                }
-              } else {
-                this.insertLocalTransaction(tx, serverTransaction);
-              }
-            });
-            
-            resolve();
-          },
-          (_, error) => {
-            console.error('[Sync] Error fetching local transactions:', error);
-            reject(error);
-          }
-        );
-      });
-    });
+    const localTransactions = await this.db.getAllAsync('SELECT * FROM transactions');
+
+    for (const serverTransaction of serverTransactions) {
+      const localTransaction = localTransactions.find(local => local.server_id === serverTransaction.id);
+
+      if (localTransaction) {
+        if (this.shouldUpdateLocal(localTransaction, serverTransaction)) {
+          await this.updateLocalTransaction(localTransaction.id, serverTransaction);
+        }
+      } else {
+        await this.insertLocalTransaction(serverTransaction);
+      }
+    }
   }
 
   /**
    * Sincronizar cartões de crédito
    */
   async syncCreditCards(serverCreditCards) {
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'SELECT * FROM credit_cards',
-          [],
-          (_, { rows }) => {
-            const localCreditCards = rows._array;
-            
-            serverCreditCards.forEach(serverCard => {
-              const localCard = localCreditCards.find(local => local.server_id === serverCard.id);
-              
-              if (localCard) {
-                if (this.shouldUpdateLocal(localCard, serverCard)) {
-                  this.updateLocalCreditCard(tx, localCard.id, serverCard);
-                }
-              } else {
-                this.insertLocalCreditCard(tx, serverCard);
-              }
-            });
-            
-            resolve();
-          },
-          (_, error) => {
-            console.error('[Sync] Error fetching local credit cards:', error);
-            reject(error);
-          }
-        );
-      });
-    });
+    const localCreditCards = await this.db.getAllAsync('SELECT * FROM credit_cards');
+
+    for (const serverCard of serverCreditCards) {
+      const localCard = localCreditCards.find(local => local.server_id === serverCard.id);
+
+      if (localCard) {
+        if (this.shouldUpdateLocal(localCard, serverCard)) {
+          await this.updateLocalCreditCard(localCard.id, serverCard);
+        }
+      } else {
+        await this.insertLocalCreditCard(serverCard);
+      }
+    }
   }
 
   /**
    * Sincronizar metas financeiras
    */
   async syncFinancialGoals(serverGoals) {
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'SELECT * FROM financial_goals',
-          [],
-          (_, { rows }) => {
-            const localGoals = rows._array;
-            
-            serverGoals.forEach(serverGoal => {
-              const localGoal = localGoals.find(local => local.server_id === serverGoal.id);
-              
-              if (localGoal) {
-                if (this.shouldUpdateLocal(localGoal, serverGoal)) {
-                  this.updateLocalFinancialGoal(tx, localGoal.id, serverGoal);
-                }
-              } else {
-                this.insertLocalFinancialGoal(tx, serverGoal);
-              }
-            });
-            
-            resolve();
-          },
-          (_, error) => {
-            console.error('[Sync] Error fetching local financial goals:', error);
-            reject(error);
-          }
-        );
-      });
-    });
+    const localGoals = await this.db.getAllAsync('SELECT * FROM financial_goals');
+
+    for (const serverGoal of serverGoals) {
+      const localGoal = localGoals.find(local => local.server_id === serverGoal.id);
+
+      if (localGoal) {
+        if (this.shouldUpdateLocal(localGoal, serverGoal)) {
+          await this.updateLocalFinancialGoal(localGoal.id, serverGoal);
+        }
+      } else {
+        await this.insertLocalFinancialGoal(serverGoal);
+      }
+    }
   }
 
   /**
@@ -412,76 +344,14 @@ class SyncService {
    * Buscar mudanças locais pendentes
    */
   async getPendingLocalChanges() {
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        const results = {};
-        let completedQueries = 0;
-        const totalQueries = 4;
+    const [categories, transactions, creditCards, financialGoals] = await Promise.all([
+      this.db.getAllAsync('SELECT * FROM categories WHERE server_id IS NULL OR needs_sync = 1'),
+      this.db.getAllAsync('SELECT * FROM transactions WHERE server_id IS NULL OR needs_sync = 1'),
+      this.db.getAllAsync('SELECT * FROM credit_cards WHERE server_id IS NULL OR needs_sync = 1'),
+      this.db.getAllAsync('SELECT * FROM financial_goals WHERE server_id IS NULL OR needs_sync = 1'),
+    ]);
 
-        const checkComplete = () => {
-          completedQueries++;
-          if (completedQueries === totalQueries) {
-            resolve(results);
-          }
-        };
-
-        // Categorias pendentes (sem server_id ou modificadas)
-        tx.executeSql(
-          'SELECT * FROM categories WHERE server_id IS NULL OR needs_sync = 1',
-          [],
-          (_, { rows }) => {
-            results.categories = rows._array;
-            checkComplete();
-          },
-          (_, error) => {
-            console.error('[Sync] Error fetching pending categories:', error);
-            reject(error);
-          }
-        );
-
-        // Transações pendentes
-        tx.executeSql(
-          'SELECT * FROM transactions WHERE server_id IS NULL OR needs_sync = 1',
-          [],
-          (_, { rows }) => {
-            results.transactions = rows._array;
-            checkComplete();
-          },
-          (_, error) => {
-            console.error('[Sync] Error fetching pending transactions:', error);
-            reject(error);
-          }
-        );
-
-        // Cartões pendentes
-        tx.executeSql(
-          'SELECT * FROM credit_cards WHERE server_id IS NULL OR needs_sync = 1',
-          [],
-          (_, { rows }) => {
-            results.creditCards = rows._array;
-            checkComplete();
-          },
-          (_, error) => {
-            console.error('[Sync] Error fetching pending credit cards:', error);
-            reject(error);
-          }
-        );
-
-        // Metas pendentes
-        tx.executeSql(
-          'SELECT * FROM financial_goals WHERE server_id IS NULL OR needs_sync = 1',
-          [],
-          (_, { rows }) => {
-            results.financialGoals = rows._array;
-            checkComplete();
-          },
-          (_, error) => {
-            console.error('[Sync] Error fetching pending financial goals:', error);
-            reject(error);
-          }
-        );
-      });
-    });
+    return { categories, transactions, creditCards, financialGoals };
   }
 
   /**
@@ -639,15 +509,15 @@ class SyncService {
   /**
    * Métodos auxiliares para atualizar registros locais
    */
-  updateLocalCategory(tx, localId, serverCategory) {
-    tx.executeSql(
+  async updateLocalCategory(localId, serverCategory) {
+    await this.db.runAsync(
       `UPDATE categories SET 
         name = ?, type = ?, color = ?, icon = ?, 
         server_id = ?, updated_at = ?, needs_sync = 0
        WHERE id = ?`,
       [
         serverCategory.name,
-        serverCategory.type,
+        String(serverCategory.type).toLowerCase(),
         serverCategory.color,
         serverCategory.icon,
         serverCategory.id,
@@ -657,13 +527,13 @@ class SyncService {
     );
   }
 
-  insertLocalCategory(tx, serverCategory) {
-    tx.executeSql(
+  async insertLocalCategory(serverCategory) {
+    await this.db.runAsync(
       `INSERT INTO categories (name, type, color, icon, server_id, created_at, updated_at, needs_sync)
        VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
       [
         serverCategory.name,
-        serverCategory.type,
+        String(serverCategory.type).toLowerCase(),
         serverCategory.color,
         serverCategory.icon,
         serverCategory.id,
@@ -673,62 +543,219 @@ class SyncService {
     );
   }
 
-  // Métodos similares para outros tipos de dados...
-  // (updateLocalTransaction, insertLocalTransaction, etc.)
+  async getLocalReferenceId(tableName, serverId) {
+    if (serverId == null) {
+      return null;
+    }
+
+    const row = await this.db.getFirstAsync(
+      `SELECT id FROM ${tableName} WHERE server_id = ?`,
+      [serverId]
+    );
+
+    if (!row) {
+      throw new Error(`Could not find local ${tableName} record for server ID ${serverId}`);
+    }
+
+    return row.id;
+  }
+
+  async mapServerTransaction(serverTransaction) {
+    const categoryServerId = serverTransaction.categoryId ?? serverTransaction.category?.id;
+    const creditCardServerId = serverTransaction.creditCardId ?? serverTransaction.creditCard?.id;
+    const categoryId = await this.getLocalReferenceId('categories', categoryServerId);
+    const creditCardId = await this.getLocalReferenceId('credit_cards', creditCardServerId);
+
+    if (categoryId == null) {
+      throw new Error(`Server transaction ${serverTransaction.id} has no category ID`);
+    }
+
+    return {
+      categoryId,
+      categoryServerId,
+      creditCardId,
+      creditCardServerId,
+      description: serverTransaction.description,
+      amount: serverTransaction.amount,
+      type: String(serverTransaction.type).toLowerCase(),
+      transactionDate: serverTransaction.transactionDate ?? serverTransaction.date,
+    };
+  }
+
+  async updateLocalTransaction(localId, serverTransaction) {
+    const mapped = await this.mapServerTransaction(serverTransaction);
+    await this.db.runAsync(
+      `UPDATE transactions SET
+        description = ?, amount = ?, type = ?, category_id = ?, category_server_id = ?,
+        credit_card_id = ?, credit_card_server_id = ?, transaction_date = ?,
+        server_id = ?, updated_at = ?, needs_sync = 0
+       WHERE id = ?`,
+      [
+        mapped.description,
+        mapped.amount,
+        mapped.type,
+        mapped.categoryId,
+        mapped.categoryServerId,
+        mapped.creditCardId,
+        mapped.creditCardServerId,
+        mapped.transactionDate,
+        serverTransaction.id,
+        new Date().toISOString(),
+        localId,
+      ]
+    );
+  }
+
+  async insertLocalTransaction(serverTransaction) {
+    const mapped = await this.mapServerTransaction(serverTransaction);
+    const now = new Date().toISOString();
+    await this.db.runAsync(
+      `INSERT INTO transactions (
+        description, amount, type, category_id, category_server_id, credit_card_id,
+        credit_card_server_id, transaction_date, server_id, created_at, updated_at, needs_sync
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      [
+        mapped.description,
+        mapped.amount,
+        mapped.type,
+        mapped.categoryId,
+        mapped.categoryServerId,
+        mapped.creditCardId,
+        mapped.creditCardServerId,
+        mapped.transactionDate,
+        serverTransaction.id,
+        now,
+        now,
+      ]
+    );
+  }
+
+  async updateLocalCreditCard(localId, serverCard) {
+    await this.db.runAsync(
+      `UPDATE credit_cards SET
+        name = ?, limit_amount = ?, closing_day = ?, due_day = ?,
+        server_id = ?, updated_at = ?, needs_sync = 0
+       WHERE id = ?`,
+      [
+        serverCard.name,
+        serverCard.limitAmount,
+        serverCard.closingDay,
+        serverCard.dueDay,
+        serverCard.id,
+        new Date().toISOString(),
+        localId,
+      ]
+    );
+  }
+
+  async insertLocalCreditCard(serverCard) {
+    const now = new Date().toISOString();
+    await this.db.runAsync(
+      `INSERT INTO credit_cards (
+        name, limit_amount, closing_day, due_day, server_id, created_at, updated_at, needs_sync
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+      [
+        serverCard.name,
+        serverCard.limitAmount,
+        serverCard.closingDay,
+        serverCard.dueDay,
+        serverCard.id,
+        now,
+        now,
+      ]
+    );
+  }
+
+  async mapServerFinancialGoal(serverGoal) {
+    const categoryServerId = serverGoal.categoryId ?? serverGoal.category?.id;
+    const categoryId = await this.getLocalReferenceId('categories', categoryServerId);
+
+    if (categoryId == null) {
+      throw new Error(`Server financial goal ${serverGoal.id} has no category ID`);
+    }
+
+    return {
+      categoryId,
+      categoryServerId,
+      name: serverGoal.name,
+      targetAmount: serverGoal.targetAmount,
+      currentAmount: serverGoal.currentAmount ?? 0,
+      targetDate: serverGoal.targetDate,
+    };
+  }
+
+  async updateLocalFinancialGoal(localId, serverGoal) {
+    const mapped = await this.mapServerFinancialGoal(serverGoal);
+    await this.db.runAsync(
+      `UPDATE financial_goals SET
+        name = ?, target_amount = ?, current_amount = ?, category_id = ?,
+        category_server_id = ?, target_date = ?, server_id = ?, updated_at = ?, needs_sync = 0
+       WHERE id = ?`,
+      [
+        mapped.name,
+        mapped.targetAmount,
+        mapped.currentAmount,
+        mapped.categoryId,
+        mapped.categoryServerId,
+        mapped.targetDate,
+        serverGoal.id,
+        new Date().toISOString(),
+        localId,
+      ]
+    );
+  }
+
+  async insertLocalFinancialGoal(serverGoal) {
+    const mapped = await this.mapServerFinancialGoal(serverGoal);
+    const now = new Date().toISOString();
+    await this.db.runAsync(
+      `INSERT INTO financial_goals (
+        name, target_amount, current_amount, category_id, category_server_id,
+        target_date, server_id, created_at, updated_at, needs_sync
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      [
+        mapped.name,
+        mapped.targetAmount,
+        mapped.currentAmount,
+        mapped.categoryId,
+        mapped.categoryServerId,
+        mapped.targetDate,
+        serverGoal.id,
+        now,
+        now,
+      ]
+    );
+  }
 
   /**
    * Atualizar server_id de registros locais
    */
   async updateLocalCategoryServerId(localId, serverId) {
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'UPDATE categories SET server_id = ?, needs_sync = 0 WHERE id = ?',
-          [serverId, localId],
-          () => resolve(),
-          (_, error) => reject(error)
-        );
-      });
-    });
+    await this.db.runAsync(
+      'UPDATE categories SET server_id = ?, needs_sync = 0 WHERE id = ?',
+      [serverId, localId]
+    );
   }
 
   async updateLocalTransactionServerId(localId, serverId) {
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'UPDATE transactions SET server_id = ?, needs_sync = 0 WHERE id = ?',
-          [serverId, localId],
-          () => resolve(),
-          (_, error) => reject(error)
-        );
-      });
-    });
+    await this.db.runAsync(
+      'UPDATE transactions SET server_id = ?, needs_sync = 0 WHERE id = ?',
+      [serverId, localId]
+    );
   }
 
   async updateLocalCreditCardServerId(localId, serverId) {
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'UPDATE credit_cards SET server_id = ?, needs_sync = 0 WHERE id = ?',
-          [serverId, localId],
-          () => resolve(),
-          (_, error) => reject(error)
-        );
-      });
-    });
+    await this.db.runAsync(
+      'UPDATE credit_cards SET server_id = ?, needs_sync = 0 WHERE id = ?',
+      [serverId, localId]
+    );
   }
 
   async updateLocalFinancialGoalServerId(localId, serverId) {
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'UPDATE financial_goals SET server_id = ?, needs_sync = 0 WHERE id = ?',
-          [serverId, localId],
-          () => resolve(),
-          (_, error) => reject(error)
-        );
-      });
-    });
+    await this.db.runAsync(
+      'UPDATE financial_goals SET server_id = ?, needs_sync = 0 WHERE id = ?',
+      [serverId, localId]
+    );
   }
 
   /**
@@ -763,4 +790,3 @@ class SyncService {
 
 // Exportar instância singleton
 export default new SyncService();
-

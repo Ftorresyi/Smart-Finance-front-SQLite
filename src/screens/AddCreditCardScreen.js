@@ -61,6 +61,7 @@ export default function AddCreditCardScreen({ navigation, route }) {
 
   // Funções do Zustand store
   const { addCreditCard, updateCreditCard, creditCards, loading } = useStore();
+  const isSaving = isSubmitting || loading.creditCards;
 
   /**
    * useEffect - Preenche formulário se estamos editando
@@ -202,10 +203,16 @@ export default function AddCreditCardScreen({ navigation, route }) {
       };
 
       if (isEditing) {
-        await updateCreditCard(creditCard.id, cardData);
+        const result = await updateCreditCard(creditCard.id, cardData);
+        if (result && result.success === false) {
+          throw new Error(result.error || 'Erro ao atualizar cartão');
+        }
         Alert.alert('Sucesso', 'Cartão atualizado com sucesso!');
       } else {
-        await addCreditCard(cardData);
+        const result = await addCreditCard(cardData);
+        if (result && result.success === false) {
+          throw new Error(result.error || 'Erro ao cadastrar cartão');
+        }
         Alert.alert('Sucesso', 'Cartão cadastrado com sucesso!');
       }
 
@@ -403,12 +410,12 @@ export default function AddCreditCardScreen({ navigation, route }) {
         <TouchableOpacity
           style={[
             styles.saveButton,
-            (isSubmitting || loading) && styles.saveButtonDisabled
+            isSaving && styles.saveButtonDisabled
           ]}
           onPress={handleSave}
-          disabled={isSubmitting || loading}
+          disabled={isSaving}
         >
-          {isSubmitting || loading ? (
+          {isSaving ? (
             <ActivityIndicator color="white" />
           ) : (
             <>
@@ -623,4 +630,3 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 });
-

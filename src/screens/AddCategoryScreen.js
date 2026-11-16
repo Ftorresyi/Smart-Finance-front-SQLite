@@ -62,6 +62,7 @@ export default function AddCategoryScreen({ navigation, route }) {
 
   // Funções do Zustand store para manipular categorias
   const { addCategory, updateCategory, loading } = useStore();
+  const isSaving = isSubmitting || loading.categories;
 
   // Cores predefinidas para o usuário escolher
   const predefinedColors = [
@@ -142,10 +143,16 @@ export default function AddCategoryScreen({ navigation, route }) {
 
       // Chamar função apropriada do store
       if (isEditing) {
-        await updateCategory(category.id, categoryData);
+        const result = await updateCategory(category.id, categoryData);
+        if (result && result.success === false) {
+          throw new Error(result.error || 'Erro ao atualizar categoria');
+        }
         Alert.alert('Sucesso', 'Categoria atualizada com sucesso!');
       } else {
-        await addCategory(categoryData);
+        const result = await addCategory(categoryData);
+        if (result && result.success === false) {
+          throw new Error(result.error || 'Erro ao criar categoria');
+        }
         Alert.alert('Sucesso', 'Categoria criada com sucesso!');
       }
 
@@ -329,12 +336,12 @@ export default function AddCategoryScreen({ navigation, route }) {
           style={[
             styles.saveButton,
             { backgroundColor: color },
-            (isSubmitting || loading) && styles.saveButtonDisabled
+            isSaving && styles.saveButtonDisabled
           ]}
           onPress={handleSave}
-          disabled={isSubmitting || loading}
+          disabled={isSaving}
         >
-          {isSubmitting || loading ? (
+          {isSaving ? (
             <ActivityIndicator color="white" />
           ) : (
             <>
@@ -545,4 +552,3 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 });
-

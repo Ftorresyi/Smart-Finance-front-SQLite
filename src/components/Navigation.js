@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 
 // Importar as telas
@@ -19,7 +19,7 @@ import AddCreditCardScreen from '../screens/AddCreditCardScreen';
 import AddGoalScreen from '../screens/AddGoalScreen';
 
 const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 // Stack Navigator para Transações
 function TransactionsStack() {
@@ -164,4 +164,3 @@ export default function Navigation() {
     </NavigationContainer>
   );
 }
-

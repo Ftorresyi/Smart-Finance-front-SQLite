@@ -75,6 +75,7 @@ export default function AddGoalScreen({ navigation, route }) {
     loadCategories,
     loading,
   } = useStore();
+  const isSaving = isSubmitting || loading.financialGoals;
 
   /**
    * useEffect - Carrega dados e preenche formulário se editando
@@ -246,10 +247,16 @@ export default function AddGoalScreen({ navigation, route }) {
       };
 
       if (isEditing) {
-        await updateFinancialGoal(goal.id, goalData);
+        const result = await updateFinancialGoal(goal.id, goalData);
+        if (result && result.success === false) {
+          throw new Error(result.error || 'Erro ao atualizar meta');
+        }
         Alert.alert('Sucesso', 'Meta atualizada com sucesso!');
       } else {
-        await addFinancialGoal(goalData);
+        const result = await addFinancialGoal(goalData);
+        if (result && result.success === false) {
+          throw new Error(result.error || 'Erro ao criar meta');
+        }
         Alert.alert('Sucesso', 'Meta criada com sucesso!');
       }
 
@@ -569,12 +576,12 @@ export default function AddGoalScreen({ navigation, route }) {
         <TouchableOpacity
           style={[
             styles.saveButton,
-            (isSubmitting || loading) && styles.saveButtonDisabled
+            isSaving && styles.saveButtonDisabled
           ]}
           onPress={handleSave}
-          disabled={isSubmitting || loading}
+          disabled={isSaving}
         >
-          {isSubmitting || loading ? (
+          {isSaving ? (
             <ActivityIndicator color="white" />
           ) : (
             <>
@@ -920,4 +927,3 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 });
-
